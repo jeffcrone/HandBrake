@@ -6579,6 +6579,15 @@ app-notification</property>
                             <signal name="value-changed" handler="preview_duration_changed_cb" swapped="no"/>
                           </object>
                         </child>
+                        <child>
+                          <object class="GtkCheckButton" id="preview_show_crop">
+                            <property name="label" translatable="yes">Show Crop</property>
+                            <property name="focusable">1</property>
+                            <property name="tooltip-text" translatable="yes">Show cropped area of the preview</property>
+                            <property name="halign">start</property>
+                            <signal name="toggled" handler="show_crop_changed_cb" swapped="no"/>
+                          </object>
+                        </child>
                       </object>
                     </child>
                     <child>

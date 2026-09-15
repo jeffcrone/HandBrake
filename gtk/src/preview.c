@@ -905,3 +905,22 @@ ghb_preview_dispose (signal_user_data_t *ud)
     }
     g_free(ud->preview);
 }
+
+G_MODULE_EXPORT void
+show_crop_changed_cb (GtkWidget *widget, gpointer data)
+{
+    signal_user_data_t *ud = ghb_ud();
+    ghb_log_func();
+    ghb_live_reset(ud);
+    ghb_widget_to_setting(ud->prefs, widget);
+    ghb_pref_save(ud->prefs, "preview_show_crop");
+
+    // This also fires when the saved preference is restored at startup,
+    // before any source has been scanned. There is no preview to redraw
+    // yet, and building one from the empty settings crashes.
+    int title_id = ghb_dict_get_int(ud->settings, "title");
+    if (ghb_lookup_title(title_id, NULL) != NULL)
+    {
+        ghb_reset_preview_image(ud);
+    }
+}
