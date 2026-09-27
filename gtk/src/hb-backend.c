@@ -4890,6 +4890,42 @@ ghb_get_preview_image(
     ghb_finalize_job(settings);
     job = ghb_get_job_settings(settings);
 
+    // Get the Show Crop value and title data
+    gboolean show_crop = ghb_dict_get_bool(ud->prefs, "preview_show_crop");
+    const hb_title_t *title = ghb_lookup_title(ghb_get_job_title_id(settings), NULL);
+
+    // If Show Crop is set to true and the title data isn't null, show the crop.
+    if (title != NULL && show_crop)
+    {
+        GhbValue *filter_list = ghb_dict_get(ghb_get_job_filter_settings(settings), "FilterList");
+        GhbValue *filter      = hb_filter_dict_find(filter_list, HB_FILTER_CROP_SCALE);
+
+        if (filter != NULL)
+        {
+            GhbValue *fs = ghb_dict_get(filter, "Settings");
+            int top    = ghb_dict_get_int(fs, "crop-top");
+            int bottom = ghb_dict_get_int(fs, "crop-bottom");
+            int left   = ghb_dict_get_int(fs, "crop-left");
+            int right  = ghb_dict_get_int(fs, "crop-right");
+            int src_w  = title->geometry.width;
+            int src_h  = title->geometry.height;
+            int crop_w = src_w - left - right;
+            int crop_h = src_h - top - bottom;
+
+            if (src_w > 0 && src_h > 0 && crop_w > 0 && crop_h > 0)
+            {
+                // Keep the same scale factor the cropped encode would use, so
+                // the output PAR stays valid for the larger, uncropped frame.
+                ghb_dict_set_int(fs, "width",  ghb_dict_get_int(fs, "width")  * src_w / crop_w);
+                ghb_dict_set_int(fs, "height", ghb_dict_get_int(fs, "height") * src_h / crop_h);
+                ghb_dict_set_int(fs, "crop-top", 0);
+                ghb_dict_set_int(fs, "crop-bottom", 0);
+                ghb_dict_set_int(fs, "crop-left", 0);
+                ghb_dict_set_int(fs, "crop-right", 0);
+            }
+        }
+    }
+
     GdkPixbuf     * preview;
     hb_image_t    * image = NULL;
     if (ghb_get_job_title_id(settings) >= 0)
