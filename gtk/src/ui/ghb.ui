@@ -6435,6 +6435,7 @@ battery is charged.</property>
     <property name="default-width">854</property>
     <property name="default-height">480</property>
     <property name="css-classes">ghb-preview-window</property>
+    <style><class name="background"/></style>
     <signal name="notify::fullscreened" handler="preview_notify_fullscreen_cb" swapped="no"/>
     <signal name="close-request" handler="preview_close_request_cb" swapped="no"/>
     <property name="child">

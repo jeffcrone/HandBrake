@@ -36,6 +36,13 @@
 
 .ghb-preview-image-frame
 {
+    /* Make the background transparent, aka don't add any black bars. */
+    background-color: transparent;
+}
+
+.ghb-preview-image-frame.ghb-preview-fullscreen
+{
+    /* Make the background black again for fullscreen. */
     background-color: black;
 }
 

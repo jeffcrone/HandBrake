@@ -883,6 +883,17 @@ preview_notify_fullscreen_cb (GtkWindow *window, GParamSpec *pspec, gpointer dat
 {
     gboolean is_fullscreen = gtk_window_is_fullscreen(window);
 
+    // Add a CSS class to add black background if it's fullscreen.
+    GtkWidget *frame = ghb_builder_widget("preview_image_frame");
+    if (is_fullscreen)
+    {
+        gtk_widget_add_css_class(frame, "ghb-preview-fullscreen");
+    }
+    else
+    {
+        gtk_widget_remove_css_class(frame, "ghb-preview-fullscreen");
+    }
+
     GtkWidget *widget = ghb_builder_widget("live_preview_fullscreen");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget), is_fullscreen);
     gtk_button_set_icon_name(GTK_BUTTON(widget), is_fullscreen ?
@@ -922,5 +933,12 @@ show_crop_changed_cb (GtkWidget *widget, gpointer data)
     if (ghb_lookup_title(title_id, NULL) != NULL)
     {
         ghb_reset_preview_image(ud);
+
+        // Also change the size of the preview window.
+        GtkWindow *window = GTK_WINDOW(ghb_builder_widget("preview_window"));
+        if (!gtk_window_is_fullscreen(window) && ud->preview->render_width > 0 && ud->preview->render_height > 0)
+        {
+            gtk_window_set_default_size(window, ud->preview->render_width, ud->preview->render_height);
+        }
     }
 }
