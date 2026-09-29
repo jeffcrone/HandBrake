@@ -3987,6 +3987,16 @@ ghb_picture_settings_deps(signal_user_data_t *ud)
     {
         gtk_image_set_from_icon_name(GTK_IMAGE(widget), "edit-clear");
     }
+
+    // Show Crop can't line up with the picture once it is rotated, flipped
+    // or padded (see ghb_get_preview_image), so disable it rather than let it
+    // silently do nothing. The saved preference is left alone.
+    const gchar *rotate = ghb_dict_get_string(ud->settings, "rotate");
+    gboolean hflip  = ghb_dict_get_bool(ud->settings, "hflip");
+    gboolean enable_show_crop = (rotate == NULL || !strcmp(rotate, "0")) && !hflip && !strcmp(pad_mode, "none");
+
+    widget = ghb_builder_widget("preview_show_crop");
+    gtk_widget_set_sensitive(widget, enable_show_crop);
 }
 
 static void
@@ -4879,38 +4889,147 @@ ghb_pause_resume_queue (void)
     }
 }
 
+static void
+vert_line(
+    GdkPixbuf * pb,
+    guint8 r,
+    guint8 g,
+    guint8 b,
+    gint x,
+    gint y,
+    gint len,
+    gint width)
+{
+    guint8 *pixels = gdk_pixbuf_get_pixels (pb);
+    guint8 *dst;
+    gint ii, jj;
+    gint channels = gdk_pixbuf_get_n_channels (pb);
+    gint stride = gdk_pixbuf_get_rowstride (pb);
+
+    for (jj = 0; jj < width; jj++)
+    {
+        dst = pixels + y * stride + (x+jj) * channels;
+        for (ii = 0; ii < len; ii++)
+        {
+            dst[0] = r;
+            dst[1] = g;
+            dst[2] = b;
+            dst += stride;
+        }
+    }
+}
+
+static void
+horz_line(
+    GdkPixbuf * pb,
+    guint8 r,
+    guint8 g,
+    guint8 b,
+    gint x,
+    gint y,
+    gint len,
+    gint width)
+{
+    guint8 *pixels = gdk_pixbuf_get_pixels (pb);
+    guint8 *dst;
+    gint ii, jj;
+    gint channels = gdk_pixbuf_get_n_channels (pb);
+    gint stride = gdk_pixbuf_get_rowstride (pb);
+
+    for (jj = 0; jj < width; jj++)
+    {
+        dst = pixels + (y+jj) * stride + x * channels;
+        for (ii = 0; ii < len; ii++)
+        {
+            dst[0] = r;
+            dst[1] = g;
+            dst[2] = b;
+            dst += channels;
+        }
+    }
+}
+
+static void
+hash_pixbuf(
+    GdkPixbuf * pb,
+    gint        x,
+    gint        y,
+    gint        w,
+    gint        h,
+    gint        step,
+    gint        orientation,
+    gint        line_width)
+{
+    gint ii, jj;
+    struct
+    {
+        guint8 r;
+        guint8 g;
+        guint8 b;
+    } c[4] =
+    {{0x80, 0x80, 0x80},{0xC0, 0x80, 0x70},{0x80, 0xA0, 0x80},{0x70, 0x80, 0xA0}};
+
+    if (!orientation)
+    {
+        // vertical lines
+        for (ii = x, jj = 0; ii+line_width < x+w; ii += step, jj++)
+        {
+            vert_line(pb, c[jj&3].r, c[jj&3].g, c[jj&3].b, ii, y, h, line_width);
+        }
+    }
+    else
+    {
+        // horizontal lines
+        for (ii = y, jj = 0; ii+line_width < y+h; ii += step, jj++)
+        {
+            horz_line(pb, c[jj&3].r, c[jj&3].g, c[jj&3].b, x, ii, w, line_width);
+        }
+    }
+}
+
 GdkPixbuf*
 ghb_get_preview_image(
     gint index,
     signal_user_data_t *ud)
 {
     GhbValue * settings, * job;
+    gint top    = 0;
+    gint bottom = 0;
+    gint left   = 0;
+    gint right  = 0;
+    gint src_w  = 0;
+    gint src_h  = 0;
+    gboolean draw_crop = FALSE;
 
     settings = ghb_value_dup(ud->settings);
     ghb_finalize_job(settings);
     job = ghb_get_job_settings(settings);
 
+    GhbValue *filter_list = ghb_dict_get(ghb_get_job_filter_settings(settings), "FilterList");
+
     // Get the Show Crop value and title data
-    gboolean show_crop = ghb_dict_get_bool(ud->prefs, "preview_show_crop");
+    // picture after cropping, so the uncropped view and its crop stripes
+    // would not line up; treat the feature as off without touching the
+    // saved preference, so it comes back when those are removed.
+    gboolean show_crop = ghb_dict_get_bool(ud->prefs, "preview_show_crop") && hb_filter_dict_find(filter_list, HB_FILTER_ROTATE) == NULL && hb_filter_dict_find(filter_list, HB_FILTER_PAD) == NULL;
     const hb_title_t *title = ghb_lookup_title(ghb_get_job_title_id(settings), NULL);
 
     // If Show Crop is set to true and the title data isn't null, show the crop.
     if (title != NULL && show_crop)
     {
-        GhbValue *filter_list = ghb_dict_get(ghb_get_job_filter_settings(settings), "FilterList");
         GhbValue *filter      = hb_filter_dict_find(filter_list, HB_FILTER_CROP_SCALE);
 
         if (filter != NULL)
         {
             GhbValue *fs = ghb_dict_get(filter, "Settings");
-            int top    = ghb_dict_get_int(fs, "crop-top");
-            int bottom = ghb_dict_get_int(fs, "crop-bottom");
-            int left   = ghb_dict_get_int(fs, "crop-left");
-            int right  = ghb_dict_get_int(fs, "crop-right");
-            int src_w  = title->geometry.width;
-            int src_h  = title->geometry.height;
-            int crop_w = src_w - left - right;
-            int crop_h = src_h - top - bottom;
+            top    = ghb_dict_get_int(fs, "crop-top");
+            bottom = ghb_dict_get_int(fs, "crop-bottom");
+            left   = ghb_dict_get_int(fs, "crop-left");
+            right  = ghb_dict_get_int(fs, "crop-right");
+            src_w  = title->geometry.width;
+            src_h  = title->geometry.height;
+            gint crop_w = src_w - left - right;
+            gint crop_h = src_h - top - bottom;
 
             if (src_w > 0 && src_h > 0 && crop_w > 0 && crop_h > 0)
             {
@@ -4922,6 +5041,7 @@ ghb_get_preview_image(
                 ghb_dict_set_int(fs, "crop-bottom", 0);
                 ghb_dict_set_int(fs, "crop-left", 0);
                 ghb_dict_set_int(fs, "crop-right", 0);
+                draw_crop = TRUE;
             }
         }
     }
@@ -4974,6 +5094,25 @@ ghb_get_preview_image(
         }
         src_line += image->plane[0].stride;
         dst += stride;
+    }
+
+    // Show the crop if it's set.
+    if (draw_crop)
+    {
+        // The image is the full uncropped frame, stretched by libhb for PAR,
+        // so scale each axis separately from source pixels to image pixels.
+        gdouble xscale = (gdouble)image->width  / src_w;
+        gdouble yscale = (gdouble)image->height / src_h;
+        gint t = top * yscale, b = bottom * yscale;
+        gint l = left * xscale, r = right * xscale;
+        gint w = image->width, h = image->height;
+        gint line_width = MAX(2, image->width / 240);
+        gint step = line_width * 4;
+
+        if (t > 0) hash_pixbuf(preview, 0, 0,     w, t, step, 0, line_width);  // top
+        if (b > 0) hash_pixbuf(preview, 0, h - b, w, b, step, 0, line_width);  // bottom
+        if (l > 0) hash_pixbuf(preview, 0, 0,     l, h, step, 1, line_width);  // left
+        if (r > 0) hash_pixbuf(preview, w - r, 0, r, h, step, 1, line_width);  // right
     }
 
     hb_image_close(&image);
