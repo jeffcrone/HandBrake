@@ -7,13 +7,35 @@
    For full terms see the file COPYING file or visit http://www.gnu.org/licenses/gpl-2.0.html
  */
 
+#ifdef pixel
+#   undef pixel
+#endif
+#ifdef pixel_2
+#   undef pixel_2
+#endif
+#ifdef integral_pixel
+#   undef integral_pixel
+#endif
+#ifdef pixel_diff
+#   undef pixel_diff
+#endif
+#ifdef pixel_diff_2
+#   undef pixel_diff_2
+#endif
+
 #if BIT_DEPTH > 8
 #   define pixel   uint16_t
 #   define pixel_2 uint32_t
+#   define integral_pixel uint64_t
+#   define pixel_diff int32_t
+#   define pixel_diff_2 int64_t
 #   define FUNC(name) name##_##16
 #else
 #   define pixel   uint8_t
 #   define pixel_2 uint16_t
+#   define integral_pixel uint32_t
+#   define pixel_diff int16_t
+#   define pixel_diff_2 int32_t
 #   define FUNC(name) name##_##8
 #endif
 
@@ -542,7 +564,7 @@ static void FUNC(nlmeans_prefilter)(BorderedPlane *src,
     hb_unlock(src->mutex);
 }
 
-static void FUNC(build_integral_scalar)(uint32_t *integral,
+static void FUNC(build_integral_scalar)(void *integral,
                                         int       integral_stride,
                                   const void  *in_src,
                                   const void  *in_src_pre,
@@ -566,26 +588,21 @@ static void FUNC(build_integral_scalar)(uint32_t *integral,
     {
         const pixel *p1 = src_pre     + (y-n_half   )*bw - n_half;
         const pixel *p2 = compare_pre + (y-n_half+dy)*bw - n_half + dx;
-        uint32_t *out = integral + (y*integral_stride);
+        const integral_pixel *prev = (const integral_pixel *)(integral) + ((y > 0 ? y-1 : 0) * integral_stride);
+        integral_pixel *out = (integral_pixel *)(integral) + (y*integral_stride);
 
+        integral_pixel pixel_sum = 0;
         for (int x = 0; x < dst_w + n; x++)
         {
-            int diff = *p1 - *p2;
-            *out = *(out-1) + diff * diff;
+            // Square the difference between the two pixels and add to the integral sum
+            pixel_diff diff = (pixel_diff)(*p1) - (pixel_diff)(*p2);
+            pixel_sum += (integral_pixel)((pixel_diff_2)(diff) * diff);
+            *out = pixel_sum + (y > 0 ? *prev : 0);
+
+            prev++;
             out++;
             p1++;
             p2++;
-        }
-
-        if (y > 0)
-        {
-            out = integral + y*integral_stride;
-
-            for (int x = 0; x < dst_w + n; x++)
-            {
-                *out += *(out - integral_stride);
-                out++;
-            }
         }
     }
 }
@@ -599,13 +616,12 @@ static void FUNC(nlmeans_plane)(NLMeansFunctions *functions,
                                 int dst_w,
                                 int dst_s,
                                 int dst_h,
-                                double h_param,
                                 double origin_tune,
                                 int n,
                                 int r,
                           const float *exptable,
                           const float  weight_fact_table,
-                          const int    diff_max)
+                          const uint64_t diff_max)
 {
     pixel *dst = in_dst;
     const int r_half = (r-1) /2;
@@ -622,8 +638,8 @@ static void FUNC(nlmeans_plane)(NLMeansFunctions *functions,
 
     // Allocate integral image
     const int integral_stride    = ((dst_w + n + 15) / 16 * 16) + 2 * 16;
-    uint32_t* const integral_mem = calloc(integral_stride * (dst_h + n + 1), sizeof(uint32_t));
-    uint32_t* const integral     = integral_mem + integral_stride + 16;
+    integral_pixel* const integral_mem = calloc(integral_stride * (dst_h + n + 1), sizeof(integral_pixel));
+    integral_pixel* const integral     = integral_mem + integral_stride + 16;
 
     // Iterate through available frames
     for (int f = 0; f < nframes; f++)
@@ -672,25 +688,28 @@ static void FUNC(nlmeans_plane)(NLMeansFunctions *functions,
                 // Average displacement
                 for (int y = 0; y < dst_h; y++)
                 {
-                    const uint32_t *integral_ptr1 = integral + (y  -1)*integral_stride - 1;
-                    const uint32_t *integral_ptr2 = integral + (y+n-1)*integral_stride - 1;
+                    const integral_pixel *integral_ptr1 = integral + (y  -1)*integral_stride - 1;
+                    const integral_pixel *integral_ptr2 = integral + (y+n-1)*integral_stride - 1;
 
                     for (int x = 0; x < dst_w; x++)
                     {
 
                         // Difference between patches
-                        const int diff = (uint32_t)(integral_ptr2[n] - integral_ptr2[0] - integral_ptr1[n] + integral_ptr1[0]);
+                        const integral_pixel diff = (integral_pixel)(integral_ptr2[n] - integral_ptr2[0] - integral_ptr1[n] + integral_ptr1[0]);
 
                         // Sum pixel with weight
                         if (diff < diff_max)
                         {
-                            const int diffidx = diff * weight_fact_table;
+                            const int diffidx = (int)(diff * weight_fact_table);
 
-                            //float weight = exp(-diff*weightFact);
-                            const float weight = exptable[diffidx];
+                            if (diffidx < NLMEANS_EXPSIZE)
+                            {
+                                //float weight = exp(-diff*weightFact);
+                                const float weight = exptable[diffidx];
 
-                            tmp_data[y*dst_w + x].weight_sum += weight;
-                            tmp_data[y*dst_w + x].pixel_sum  += weight * compare[(y+dy)*bw + x + dx];
+                                tmp_data[y*dst_w + x].weight_sum += weight;
+                                tmp_data[y*dst_w + x].pixel_sum  += weight * compare[(y+dy)*bw + x + dx];
+                            }
                         }
 
                         integral_ptr1++;

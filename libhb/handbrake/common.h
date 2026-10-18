@@ -540,6 +540,7 @@ const char * hb_audio_name_generate_s(const char *name,
 
 void        hb_video_quality_get_limits(uint32_t codec, float *low, float *high, float *granularity, int *direction);
 const char* hb_video_quality_get_name(uint32_t codec);
+float       hb_video_quality_get_default(uint32_t codec);
 
 int         hb_video_quality_is_supported(uint32_t codec);
 int         hb_video_bitrate_is_supported(uint32_t codec);
@@ -1693,6 +1694,8 @@ struct hb_filter_object_s
     hb_fifo_t           * fifo_in;
     hb_fifo_t           * fifo_out;
 
+    int                   output_immediately;
+
     hb_subtitle_t       * subtitle;
 
     hb_filter_private_t * private_data;
@@ -1742,6 +1745,7 @@ enum
     HB_FILTER_INVALID = 0,
     HB_FILTER_FIRST = 1,
 
+    HB_FILTER_ADAPTER,
     HB_FILTER_ADAPTER_VT,
     // First, filters that may change the framerate (drop or dup frames)
     HB_FILTER_DETELECINE,

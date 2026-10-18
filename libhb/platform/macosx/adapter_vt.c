@@ -36,7 +36,7 @@ struct hb_filter_private_s
 
 static int adapter_vt_init(hb_filter_object_t *filter, hb_filter_init_t *init)
 {
-    filter->private_data = calloc(sizeof(struct hb_filter_private_s), 1);
+    filter->private_data = calloc(1, sizeof(struct hb_filter_private_s));
     if (filter->private_data == NULL)
     {
         hb_error("adapter_vt: calloc failed");
@@ -204,12 +204,14 @@ static int update_filters(hb_filter_private_t *pv)
 
         hb_filter_object_t *filter;
 
-        if (pv->rotation == HB_ROTATION_90 ||
-            pv->rotation == HB_ROTATION_270)
+        int swap = pv->rotation == HB_ROTATION_90 || pv->rotation == HB_ROTATION_270;
+        if (swap)
         {
             init.geometry.width  = pv->input.geometry.height;
             init.geometry.height = pv->input.geometry.width;
         }
+
+        hb_log("adapter_vt: updating filters");
 
         // Crop Scale & Format
         if (pv->output.geometry.width  != pv->input.geometry.width  ||
@@ -220,8 +222,10 @@ static int update_filters(hb_filter_private_t *pv)
             filter = hb_filter_init(HB_FILTER_CROP_SCALE_VT);
             filter->settings = hb_dict_init();
 
-            hb_dict_set_int(filter->settings, "width",  init.geometry.width);
-            hb_dict_set_int(filter->settings, "height", init.geometry.height);
+            hb_dict_set_int(filter->settings, "width",  swap ? pv->output.geometry.height :
+                            pv->output.geometry.width);
+            hb_dict_set_int(filter->settings, "height", swap ? pv->output.geometry.width  :
+                            pv->output.geometry.height);
 
             if (pv->output.geometry.width  != pv->input.geometry.width  ||
                 pv->output.geometry.height != pv->input.geometry.height)
@@ -284,7 +288,6 @@ static int update_filters(hb_filter_private_t *pv)
                 hb_filter_close(&filter);
             }
         }
-
 
         for (int ii = 0; ii < hb_list_count(list_filter);)
         {

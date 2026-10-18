@@ -1872,6 +1872,87 @@ const char* hb_video_quality_get_name(uint32_t codec)
     }
 }
 
+float hb_video_quality_get_default(uint32_t codec)
+{
+    switch (codec)
+    {
+        case HB_VCODEC_X264_8BIT:
+        case HB_VCODEC_X264_10BIT:
+        case HB_VCODEC_X265_8BIT:
+        case HB_VCODEC_X265_10BIT:
+        case HB_VCODEC_X265_12BIT:
+        case HB_VCODEC_X265_16BIT:
+            return 18.;
+
+        case HB_VCODEC_SVT_AV1:
+        case HB_VCODEC_SVT_AV1_10BIT:
+            return 30.;
+
+        case HB_VCODEC_FFMPEG_VP8:
+            return 14.;
+
+        case HB_VCODEC_FFMPEG_VP9:
+        case HB_VCODEC_FFMPEG_VP9_10BIT:
+            return 26.;
+
+        case HB_VCODEC_FFMPEG_MPEG2:
+        case HB_VCODEC_FFMPEG_MPEG4:
+            return 3.;
+
+        case HB_VCODEC_FFMPEG_NVENC_H264:
+        case HB_VCODEC_FFMPEG_NVENC_H264_10BIT:
+        case HB_VCODEC_FFMPEG_NVENC_H265:
+        case HB_VCODEC_FFMPEG_NVENC_H265_10BIT:
+        case HB_VCODEC_FFMPEG_NVENC_AV1:
+        case HB_VCODEC_FFMPEG_NVENC_AV1_10BIT:
+            return 27.;
+
+        case HB_VCODEC_FFMPEG_VCE_H264:
+        case HB_VCODEC_FFMPEG_VCE_H265:
+        case HB_VCODEC_FFMPEG_VCE_H265_10BIT:
+        case HB_VCODEC_FFMPEG_VCE_AV1:
+        case HB_VCODEC_FFMPEG_VCE_AV1_10BIT:
+            return 25.;
+
+        case HB_VCODEC_VT_H264:
+        case HB_VCODEC_VT_H265:
+        case HB_VCODEC_VT_H265_10BIT:
+            return 60.;
+
+        case HB_VCODEC_FFMPEG_DNXHR:
+        case HB_VCODEC_FFMPEG_DNXHR_10BIT:
+        case HB_VCODEC_FFMPEG_FFV1:
+        case HB_VCODEC_FFMPEG_PRORES:
+        case HB_VCODEC_VT_PRORES:
+            return 0.;
+
+        case HB_VCODEC_FFMPEG_MF_H264:
+        case HB_VCODEC_FFMPEG_MF_H265:
+        case HB_VCODEC_FFMPEG_MF_AV1:
+            return 22.;
+
+        case HB_VCODEC_FFMPEG_QSV_H264:
+        case HB_VCODEC_FFMPEG_QSV_H265:
+        case HB_VCODEC_FFMPEG_QSV_H265_10BIT:
+        case HB_VCODEC_FFMPEG_QSV_AV1:
+        case HB_VCODEC_FFMPEG_QSV_AV1_10BIT:
+            return 25.;
+
+        case HB_VCODEC_FFMPEG_VAAPI_VP8:
+        case HB_VCODEC_FFMPEG_VAAPI_VP9:
+        case HB_VCODEC_FFMPEG_VAAPI_H264:
+        case HB_VCODEC_FFMPEG_VAAPI_H265:
+        case HB_VCODEC_FFMPEG_VAAPI_AV1:
+            return 25.;
+
+        case HB_VCODEC_THEORA:
+            return 50.;
+
+        default:
+            return HB_INVALID_VIDEO_QUALITY;
+    }
+}
+
 int hb_video_quality_is_supported(uint32_t codec)
 {
     switch (codec)
@@ -4263,8 +4344,8 @@ hb_list_t * hb_list_init()
 {
     hb_list_t * l;
 
-    l              = calloc( sizeof( hb_list_t ), 1 );
-    l->items       = calloc( HB_LIST_DEFAULT_SIZE * sizeof( void * ), 1 );
+    l              = calloc( 1, sizeof( hb_list_t ) );
+    l->items       = calloc( HB_LIST_DEFAULT_SIZE, sizeof( void * ) );
     l->items_alloc = HB_LIST_DEFAULT_SIZE;
 
     return l;
@@ -4827,7 +4908,7 @@ hb_title_t * hb_title_init( char * path, int index )
 {
     hb_title_t * t;
 
-    t = calloc( sizeof( hb_title_t ), 1 );
+    t = calloc( 1, sizeof( hb_title_t ) );
 
     t->index              = index;
     t->playlist           = -1;
@@ -5121,7 +5202,7 @@ hb_job_t * hb_job_init( hb_title_t * title )
     if ( title == NULL )
         return NULL;
 
-    job = calloc( sizeof( hb_job_t ), 1 );
+    job = calloc( 1, sizeof( hb_job_t ) );
     job_setup(job, title);
 
     return job;
@@ -5333,6 +5414,10 @@ hb_filter_object_t * hb_filter_get( int filter_id )
     hb_filter_object_t * filter;
     switch( filter_id )
     {
+        case HB_FILTER_ADAPTER:
+            filter = &hb_filter_adapter;
+            break;
+
         case HB_FILTER_DETELECINE:
             filter = &hb_filter_detelecine;
             break;
@@ -6219,6 +6304,7 @@ int hb_audio_add(const hb_job_t * job, const hb_audio_config_t * audiocfg)
     AVChannelLayout *out_ch_layout = audio->config.out.ch_layout;
     audio->config.out = audiocfg->out;
     audio->config.out.track = hb_list_count(job->list_audio) + 1;
+    audio->config.out.name = NULL;
     if (audiocfg->out.name && *audiocfg->out.name)
     {
         audio->config.out.name = strdup(audiocfg->out.name);
