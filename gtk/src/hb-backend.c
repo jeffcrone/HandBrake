@@ -5008,9 +5008,6 @@ ghb_get_preview_image(
     GhbValue *filter_list = ghb_dict_get(ghb_get_job_filter_settings(settings), "FilterList");
 
     // Get the Show Crop value and title data
-    // picture after cropping, so the uncropped view and its crop stripes
-    // would not line up; treat the feature as off without touching the
-    // saved preference, so it comes back when those are removed.
     gboolean show_crop = ghb_dict_get_bool(ud->prefs, "preview_show_crop") && hb_filter_dict_find(filter_list, HB_FILTER_ROTATE) == NULL && hb_filter_dict_find(filter_list, HB_FILTER_PAD) == NULL;
     const hb_title_t *title = ghb_lookup_title(ghb_get_job_title_id(settings), NULL);
 
